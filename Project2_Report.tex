@@ -1,0 +1,319 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    urlcolor=blue,
+    citecolor=blue
+}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{Project 2: Market-Basket Analysis using IMDB}
+\rhead{Algorithms for Massive Data}
+\cfoot{\thepage}
+
+\titleformat{\section}{\large\bfseries}{\thesection.}{0.5em}{}
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{0.5em}{}
+
+\begin{document}
+
+\begin{titlepage}
+    \centering
+    \vspace*{2.5cm}
+    {\Huge\bfseries Project 2: Market-Basket Analysis\\[0.2cm] using IMDB\par}
+    \vspace{1.2cm}
+    {\Large Algorithms for Massive Data\par}
+    \vspace{0.4cm}
+    {\large Master in Data Science for Economics\par}
+    {\large Universita degli Studi di Milano\par}
+    \vfill
+    {\large Student name: Karan Singh\par}
+    {\large Student ID: [insert student ID]\par}
+    {\large Academic year: 2025/26\par}
+    {\large Submitted to Prof. Dario Malchiodi\par}
+    \vspace*{1cm}
+\end{titlepage}
+
+\newpage
+\section*{Academic Integrity Declaration}
+I declare that this material, which I now submit for assessment, is entirely my own work and has not been taken from the work of others, save and to the extent that such work has been cited and acknowledged within the text of my work, and including any code produced using generative AI systems. I understand that plagiarism, collusion, and copying are grave and serious offences in the university and accept the penalties that would be imposed should I engage in plagiarism, collusion or copying. This assignment, or any part of it, has not been previously submitted by me or any other person for assessment on this or any other course of study.
+
+\newpage
+\tableofcontents
+\newpage
+
+\section{Dataset}
+
+\subsection{Source}
+The project uses the IMDB Dataset of Top 1000 Movies and TV Shows, available on Kaggle with identifier \texttt{harshitshankhdhar/imdb-dataset-of-top-1000-movies-and-tv-shows}. The dataset is stored in a CSV file named \texttt{imdb\_top\_1000.csv}. Each record corresponds to one movie or TV-show entry and includes metadata such as title, genre, rating, director, overview, vote count, gross revenue, and four listed actors.
+
+The project instructions for Project 2 define the market-basket task as follows: each movie is a basket, and the actors under \texttt{Star1}, \texttt{Star2}, \texttt{Star3}, and \texttt{Star4} are the items. This report follows exactly that structure.
+
+\subsection{Subset Used}
+The uploaded dataset contains 1,000 rows and 16 columns. The complete dataset is used in the main experiment. A global configuration flag is included in the notebook:
+\begin{verbatim}
+USE_FULL_DATASET = True
+SAMPLE_SIZE = 500
+\end{verbatim}
+When \texttt{USE\_FULL\_DATASET} is set to \texttt{False}, only the first \texttt{SAMPLE\_SIZE} rows are used. The same code path is used for the full dataset and for subsamples.
+
+\subsection{Fields Used}
+Only the fields required for the market-basket task are used:
+\begin{itemize}[leftmargin=*]
+    \item \texttt{Series\_Title}: used only to identify the movie corresponding to a basket.
+    \item \texttt{Star1}, \texttt{Star2}, \texttt{Star3}, \texttt{Star4}: used as actor items inside each movie basket.
+\end{itemize}
+Other columns such as rating, director, genre and gross revenue are not used, because the project objective is frequent itemset mining over actor baskets rather than prediction or ranking.
+
+\section{Data Organisation}
+The core data structure is a list of baskets. Each basket is represented as a set of actors appearing in one movie. Formally, for a movie $m_i$, the basket is:
+\[
+B_i = \{\texttt{Star1}_i, \texttt{Star2}_i, \texttt{Star3}_i, \texttt{Star4}_i\}.
+\]
+The complete transaction database is therefore:
+\[
+D = \{B_1, B_2, \ldots, B_n\},
+\]
+where $n = 1000$ for the full dataset.
+
+The use of sets removes duplicate actors inside the same movie, if such a case appears. This is appropriate because market-basket analysis records whether an item appears in a transaction, not how many times the item is repeated within the same transaction.
+
+After preprocessing, the dataset contains 1,000 baskets and 2,709 unique actors. The average basket size is approximately 3.996 actors, with basket sizes ranging from 3 to 4.
+
+\section{Pre-processing}
+
+\subsection{Actor Name Normalisation}
+Actor names are extracted from \texttt{Star1}, \texttt{Star2}, \texttt{Star3}, and \texttt{Star4}. Leading and trailing spaces are removed using a simple string-strip operation. Empty strings and missing values are ignored.
+
+\subsection{Missing Values}
+There are no missing values in the four actor columns used in this project. Missing values exist in other columns, such as \texttt{Certificate}, \texttt{Meta\_score}, and \texttt{Gross}, but those fields are not used for the market-basket analysis.
+
+\subsection{Deduplication Within Movies}
+For each movie, actor names are converted into a set. This prevents duplicated entries inside a single movie from creating artificial repeated items or invalid self-combinations.
+
+\subsection{Basket Filtering}
+Only non-empty baskets are kept. Since the actor columns are complete in this dataset, all 1,000 rows remain after preprocessing.
+
+\subsection{Limitations}
+The preprocessing has two main limitations:
+\begin{itemize}[leftmargin=*]
+    \item No actor-name disambiguation is performed. For example, two actors with identical names would be treated as the same item.
+    \item Only four actors per movie are available. Therefore, larger itemsets are naturally limited, and frequent triples or quadruples are expected to be rare.
+\end{itemize}
+
+\section{Algorithms and Implementations}
+
+\subsection{Market-Basket Analysis}
+Market-basket analysis identifies groups of items that frequently occur together in a collection of transactions. In this project, movies are transactions and actors are items. The support count of an itemset $X$ is:
+\[
+\mathrm{support\_count}(X) = |\{B_i \in D : X \subseteq B_i\}|.
+\]
+An itemset is frequent if its support count is at least the selected minimum support threshold.
+
+\subsection{Apriori: Theoretical Background}
+The Apriori algorithm is part of Chapter 6 of the course syllabus on frequent itemsets and market basket analysis. It uses the downward-closure property: if an itemset is frequent, then all of its subsets must also be frequent. Equivalently, if an itemset is not frequent, none of its supersets can be frequent.
+
+This property reduces the number of candidate itemsets that must be counted. Instead of testing all possible actor groups, the algorithm first finds frequent single actors, then uses them to generate candidate pairs, then uses frequent pairs to generate candidate triples, and so on.
+
+\subsection{Custom Apriori Implementation}
+The notebook implements Apriori from scratch using Python dictionaries, counters and frozen sets. The main function is:
+\begin{verbatim}
+apriori(baskets, min_support, max_k)
+\end{verbatim}
+The implementation follows these steps:
+\begin{enumerate}[leftmargin=*]
+    \item Count all individual actors and keep those with support at least \texttt{min\_support}.
+    \item Generate candidate itemsets of size $k$ by joining frequent itemsets of size $k-1$.
+    \item Apply Apriori pruning: every $(k-1)$-subset of a candidate must be frequent.
+    \item Count candidates by scanning the movie baskets.
+    \item Keep only candidates meeting the minimum support threshold.
+    \item Stop when no larger frequent itemsets can be generated.
+\end{enumerate}
+
+Because each movie contains at most four actors, the maximum itemset size is four.
+
+\section{Scalability}
+
+\subsection{Theoretical Complexity}
+Let $n$ be the number of baskets, $b$ the average basket size, and $C_k$ the number of candidate itemsets of size $k$. Counting candidates requires scanning the baskets and checking combinations of actors inside each basket. Since each movie has at most four actors, the number of generated combinations per basket is small:
+\[
+\binom{4}{1}=4, \quad \binom{4}{2}=6, \quad \binom{4}{3}=4, \quad \binom{4}{4}=1.
+\]
+For this dataset, the cost of scanning baskets is therefore approximately linear in the number of movies. In larger datasets with larger baskets, Apriori pruning becomes more important because it prevents the algorithm from evaluating many candidate supersets that cannot be frequent.
+
+\subsection{Empirical Scalability Experiment}
+A scalability experiment is performed by running the full Apriori pipeline on increasing fractions of the dataset: 25\%, 50\%, 75\%, and 100\%. Each runtime is averaged over repeated runs.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{rrrrr}
+\toprule
+Dataset \% & Baskets & Unique actors & Frequent itemsets & Mean runtime (s) \\
+\midrule
+25\% & 250 & 818 & 47 & 0.0016 \\
+50\% & 500 & 1532 & 99 & 0.0055 \\
+75\% & 750 & 2165 & 203 & 0.0272 \\
+100\% & 1000 & 2709 & 299 & 0.0633 \\
+\bottomrule
+\end{tabular}
+\caption{Empirical scalability experiment using minimum support 3. Runtime values may vary by machine, but the experiment structure is reproducible.}
+\end{table}
+
+The runtime increases with dataset size and with the number of frequent candidates retained. Since basket size is fixed and small in this dataset, the implementation scales mainly with the number of movie baskets and the number of generated candidates.
+
+\section{Experiments}
+
+\subsection{Dataset Statistics}
+The full dataset contains 1,000 movie baskets and 2,709 unique actors. There are no missing values in the actor columns. One duplicated movie title appears in the title field, but this does not affect the basket analysis because each row is treated as a separate transaction.
+
+\subsection{Frequent Itemsets at Minimum Support 3}
+Using minimum support 3, the algorithm finds:
+\begin{table}[H]
+\centering
+\begin{tabular}{lr}
+\toprule
+Itemset type & Number of frequent itemsets \\
+\midrule
+Frequent actors & 271 \\
+Frequent actor pairs & 25 \\
+Frequent actor triples & 3 \\
+Frequent actor quadruples & 0 \\
+\bottomrule
+\end{tabular}
+\caption{Frequent itemsets obtained with minimum support 3.}
+\end{table}
+
+\subsection{Top Frequent Actors}
+\begin{table}[H]
+\centering
+\begin{tabular}{lr}
+\toprule
+Actor & Support count \\
+\midrule
+Robert De Niro & 17 \\
+Tom Hanks & 14 \\
+Al Pacino & 13 \\
+Brad Pitt & 12 \\
+Clint Eastwood & 12 \\
+Christian Bale & 11 \\
+Leonardo DiCaprio & 11 \\
+Matt Damon & 11 \\
+James Stewart & 10 \\
+Michael Caine & 9 \\
+\bottomrule
+\end{tabular}
+\caption{Top frequent single actors.}
+\end{table}
+
+\subsection{Top Frequent Actor Pairs}
+\begin{table}[H]
+\centering
+\begin{tabular}{lr}
+\toprule
+Actor pair & Support count \\
+\midrule
+Daniel Radcliffe + Rupert Grint & 6 \\
+Daniel Radcliffe + Emma Watson & 5 \\
+Emma Watson + Rupert Grint & 5 \\
+Joe Pesci + Robert De Niro & 4 \\
+Tim Allen + Tom Hanks & 4 \\
+Al Pacino + Diane Keaton & 3 \\
+Christian Bale + Michael Caine & 3 \\
+Al Pacino + Robert De Niro & 3 \\
+Elijah Wood + Ian McKellen & 3 \\
+Elijah Wood + Orlando Bloom & 3 \\
+\bottomrule
+\end{tabular}
+\caption{Top frequent actor pairs.}
+\end{table}
+
+\subsection{Top Frequent Actor Triples}
+\begin{table}[H]
+\centering
+\begin{tabular}{lr}
+\toprule
+Actor triple & Support count \\
+\midrule
+Daniel Radcliffe + Emma Watson + Rupert Grint & 5 \\
+Elijah Wood + Ian McKellen + Orlando Bloom & 3 \\
+Carrie Fisher + Harrison Ford + Mark Hamill & 3 \\
+\bottomrule
+\end{tabular}
+\caption{Frequent actor triples with minimum support 3.}
+\end{table}
+
+\subsection{Support Threshold Experiment}
+Different minimum support thresholds are tested to observe how the number of frequent itemsets changes.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{rrrrr}
+\toprule
+Minimum support & Actors & Pairs & Triples & Quadruples \\
+\midrule
+2 & 641 & 121 & 25 & 4 \\
+3 & 271 & 25 & 3 & 0 \\
+4 & 145 & 5 & 1 & 0 \\
+5 & 79 & 3 & 1 & 0 \\
+10 & 9 & 0 & 0 & 0 \\
+\bottomrule
+\end{tabular}
+\caption{Number of frequent itemsets under different support thresholds.}
+\end{table}
+
+As expected, increasing the minimum support sharply reduces the number of frequent itemsets. This confirms the pruning behaviour of frequent itemset mining: only highly repeated actor collaborations survive high support thresholds.
+
+\section{Results and Discussion}
+
+\subsection{Actor Collaboration Structure}
+The results show that frequent actor pairs and triples are mostly associated with repeated film franchises or long-running collaborations. For example, Daniel Radcliffe, Emma Watson and Rupert Grint appear together frequently due to the Harry Potter films. Elijah Wood, Ian McKellen and Orlando Bloom appear together through The Lord of the Rings films. Carrie Fisher, Harrison Ford and Mark Hamill appear together through Star Wars entries.
+
+The algorithm identifies these patterns without using title, genre or franchise metadata. It relies only on co-occurrence inside actor baskets.
+
+\subsection{Effect of Minimum Support}
+The minimum support threshold has a strong effect on the result. With support 2, the algorithm finds many pairs, triples and even four quadruples. With support 3, only three triples remain. With support 10, only nine single actors remain and no larger collaborations survive. This is a useful finding because it shows that the chosen threshold controls the granularity of the discovered collaboration patterns.
+
+\subsection{Scalability Discussion}
+The notebook includes both a theoretical and empirical scalability analysis. The theoretical analysis shows that each movie produces a small number of actor combinations because the basket size is at most four. The empirical experiment confirms that runtime increases with the number of movie baskets and the number of generated candidates.
+
+For a much larger movie dataset, the same Apriori implementation would still run without changing the logic. However, if future datasets include many more actors per movie or many more rows, the number of candidate combinations would increase. In that case, distributed frequent itemset mining or a more memory-efficient implementation would be appropriate.
+
+\subsection{Limitations and Future Directions}
+The main limitations are:
+\begin{itemize}[leftmargin=*]
+    \item Only four actors per movie are available, which limits the discovery of larger actor groups.
+    \item The dataset contains only 1,000 highly rated IMDB entries, so the results are not representative of all cinema.
+    \item Actor names are treated as plain strings, without external identity resolution.
+\end{itemize}
+
+Future work could use a larger IMDB dataset, include full cast lists, or compare the basic Apriori implementation with syllabus-related improvements such as PCY, Multistage, Multihash, or SON. These extensions are not included in the current project because the objective here is to implement the required Project 2 market-basket analysis clearly and reproducibly.
+
+\section{Conclusion}
+This project implemented market-basket analysis on the IMDB Movies Dataset. Each movie was represented as a basket of actors, and a custom Apriori algorithm was used to mine frequent actor itemsets. The results show clear recurring collaboration patterns, especially in major film franchises. The support-threshold experiment demonstrates how the number of frequent itemsets decreases as the threshold increases, and the scalability experiment shows that the implementation can be applied consistently across larger fractions of the dataset.
+
+\newpage
+\begin{thebibliography}{9}
+\bibitem{agrawal1994}
+Agrawal, R., and Srikant, R. (1994). Fast algorithms for mining association rules. \textit{Proceedings of the 20th International Conference on Very Large Data Bases}, 487--499.
+
+\bibitem{mmds}
+Leskovec, J., Rajaraman, A., and Ullman, J. D. (2020). \textit{Mining of Massive Datasets} (3rd ed.). Cambridge University Press. Available at \url{http://www.mmds.org}.
+
+\bibitem{kaggle}
+Kaggle. IMDB Dataset of Top 1000 Movies and TV Shows. Dataset identifier: \texttt{harshitshankhdhar/imdb-dataset-of-top-1000-movies-and-tv-shows}.
+\end{thebibliography}
+
+\end{document}
