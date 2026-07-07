@@ -1,4 +1,4 @@
-# IMDB Market-Basket Analysis [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Karansingh04/IMDB-Market-Basket-Analysis/blob/main/Project2_IMDB_Market_Basket_Analysis.ipynb)
+# IMDB Market-Basket Analysis [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Karansingh04/Project-2-Market-Basket-Analysis-using-IMDB/blob/main/Project2_IMDB_Market_Basket_Analysis.ipynb)
 
 Implementation of market-basket analysis on the IMDB Movies Dataset for Project 2 of Algorithms for Massive Data.
 
